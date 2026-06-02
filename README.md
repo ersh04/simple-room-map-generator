@@ -30,18 +30,13 @@ Open project and import it into your existing project.
 Basic example:
 
 ```csharp
-private static void PrintMap(int[,] gameMap)
-    {
-        for (int y = 0; y < MapHeight; y++)
-        {
-            for (int x = 0; x < MapWidth; x++)
-            {
-                Console.Write(gameMap[x, y] == 1 ? '#' : ' ');
-            }
-
-            Console.WriteLine();
-        }
-    }
+private static Generate()
+{
+    int worldSeed = Random.Shared.Next(0, 1_000_000);
+    var rng = new Random(worldSeed);
+    int[,] gameMap = GenerateMap(rng);
+    PrintMap(gameMap);
+}
 ```
 
 ## Configuration
