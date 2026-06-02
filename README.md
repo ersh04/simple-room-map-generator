@@ -45,9 +45,9 @@ private static Generate()
 |----------|----------|
 | Width | Map width |
 | Height | Map height |
-| Room Count | Number of generated rooms |
+| Slices Count | Number of generated "rooms" |
 | Seed | Random seed |
-| Corridor Size | Corridor thickness |
+| Min Distance Between Slices | Minimal distance between slices |
 
 ## Customization
 
