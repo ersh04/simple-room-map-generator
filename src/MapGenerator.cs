@@ -4,34 +4,14 @@
     private const int MapHeight = 128;
     private const int SlicesCount = 25;
     private const int MinDistanceBetweenSlices = 5;
+    private const float MergeChance = 0.10f;
 
-    public static void Main()
+    public static int[,] GetMap(out int worldSeed)
     {
-        while (true)
-        {
-            int worldSeed = Random.Shared.Next(0, 1_000_000);
-            var rng = new Random(worldSeed);
-            int[,] gameMap = GenerateMap(rng);
-
-            Console.Clear();
-            Console.WriteLine($"World seed: {worldSeed}");
-            PrintMap(gameMap);
-            Console.WriteLine();
-
-            while (true)
-            {
-                var key = Console.ReadKey(intercept: true).Key;
-                if (key == ConsoleKey.Escape)
-                {
-                    return;
-                }
-
-                if (key == ConsoleKey.Spacebar)
-                {
-                    break;
-                }
-            }
-        }
+        worldSeed = Random.Shared.Next(0, 1_000_000);
+        var rng = new Random(worldSeed);
+        int[,] gameMap = GenerateMap(rng);
+        return gameMap;
     }
 
     private static int[,] GenerateMap(Random rng)
@@ -118,6 +98,9 @@
         }
 
         var possible = new List<int>();
+
+        bool shouldRemoveWall = rng.NextDouble() < MergeChance;
+
         for (int i = 0; i < walkSize - 1; i++)
         {
             int x1 = vertical ? i : coord;
@@ -137,6 +120,7 @@
         }
 
         int cursor = possible[rng.Next(possible.Count)];
+        bool removedWall = false;
         while (true)
         {
             cursor++;
@@ -150,6 +134,14 @@
 
             if (gameMap[x, y] == 1)
             {
+                if (shouldRemoveWall && !removedWall && x > 0 && x < MapWidth - 1 && y > 0 && y < MapHeight - 1)
+                {
+                    RemoveConnectedWall(gameMap, x, y);
+
+                    removedWall = true;
+                    continue;
+                }
+
                 break;
             }
 
@@ -159,20 +151,31 @@
         return true;
     }
 
-    /// <summary>
-    /// Prints the generated map to the console, using '#' for walls and ' ' for empty spaces.
-    /// </summary>
-    /// <param name="gameMap">The map to print.</param>
-    private static void PrintMap(int[,] gameMap)
+    private static void RemoveConnectedWall(int[,] gameMap, int startX, int startY)
     {
-        for (int y = 0; y < MapHeight; y++)
+        var cellsToVisit = new Queue<(int x, int y)>();
+        cellsToVisit.Enqueue((startX, startY));
+
+        while (cellsToVisit.Count > 0)
         {
-            for (int x = 0; x < MapWidth; x++)
+            var (x, y) = cellsToVisit.Dequeue();
+
+            if (x <= 0 || x >= MapWidth - 1 || y <= 0 || y >= MapHeight - 1)
             {
-                Console.Write(gameMap[x, y] == 1 ? '#' : ' ');
+                continue;
             }
 
-            Console.WriteLine();
+            if (gameMap[x, y] != 1)
+            {
+                continue;
+            }
+
+            gameMap[x, y] = 0;
+
+            cellsToVisit.Enqueue((x - 1, y));
+            cellsToVisit.Enqueue((x + 1, y));
+            cellsToVisit.Enqueue((x, y - 1));
+            cellsToVisit.Enqueue((x, y + 1));
         }
     }
 }
