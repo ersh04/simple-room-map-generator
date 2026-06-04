@@ -5,14 +5,19 @@ public static class Visualisation
 
     public static void Main()
     {
-        Visualise(MapGenerator.GetMap(out int worldSeed), worldSeed);
+        int worldSeed = 0;
+        var gameMap = MapGenerator.GetMap(out worldSeed);
+        Visualise(gameMap, worldSeed);
+        Converter3D.ConvertToObj(gameMap, "output.obj");
 
         while (true)
         {
             var key = Console.ReadKey(intercept: true).Key;
             if (key == ConsoleKey.Spacebar)
             {
-                Visualise(MapGenerator.GetMap(out worldSeed), worldSeed);
+                gameMap = MapGenerator.GetMap(out worldSeed);
+                Visualise(gameMap, worldSeed);
+                Converter3D.ConvertToObj(gameMap, "output.obj");
             }
 
             if (key == ConsoleKey.Escape)
