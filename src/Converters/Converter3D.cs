@@ -81,6 +81,67 @@ public class Converter3D
     #endregion
 
     #region OBJ
+    
+    private readonly record struct WallBlock(int X, int Y, int Width, int Height);
+
+    private static List<WallBlock> MergeWalls(int[,] map)
+    {
+        int width = map.GetLength(0);
+        int height = map.GetLength(1);
+
+        bool[,] visited = new bool[width, height];
+        var mergedWalls = new List<WallBlock>();
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                if (map[x, y] != 1 || visited[x, y])
+                {
+                    continue;
+                }
+
+                int blockHeight = 1;
+                while (y + blockHeight < height && map[x, y + blockHeight] == 1 && !visited[x, y + blockHeight])
+                {
+                    blockHeight++;
+                }
+
+                int blockWidth = 1;
+                while (x + blockWidth < width)
+                {
+                    bool canExtend = true;
+                    for (int dy = 0; dy < blockHeight; dy++)
+                    {
+                        if (map[x + blockWidth, y + dy] != 1 || visited[x + blockWidth, y + dy])
+                        {
+                            canExtend = false;
+                            break;
+                        }
+                    }
+
+                    if (!canExtend)
+                    {
+                        break;
+                    }
+
+                    blockWidth++;
+                }
+
+                for (int dx = 0; dx < blockWidth; dx++)
+                {
+                    for (int dy = 0; dy < blockHeight; dy++)
+                    {
+                        visited[x + dx, y + dy] = true;
+                    }
+                }
+
+                mergedWalls.Add(new WallBlock(x, y, blockWidth, blockHeight));
+            }
+        }
+
+        return mergedWalls;
+    }
 
     public static bool ConvertToObj(int[,] map, string outputPath)
     {
@@ -88,6 +149,7 @@ public class Converter3D
         {
             using (var w = new StreamWriter(outputPath))
             {
+                var mergedWalls = MergeWalls(map);
                 int width = map.GetLength(0);
                 int height = map.GetLength(1);
                 var vertexIndices = new Dictionary<(float x, float y, float z), int>();
@@ -96,49 +158,31 @@ public class Converter3D
                 w.WriteLine("# maze");
                 w.WriteLine("o maze");
 
-                for (int x = 0; x < width; x++)
+                foreach (var block in mergedWalls)
                 {
-                    for (int y = 0; y < height; y++)
-                    {
-                        if (map[x, y] != 1)
-                        {
-                            continue;
-                        }
+                    int x0 = block.X;
+                    int y0 = block.Y;
+                    int x1 = block.X + block.Width;
+                    int y1 = block.Y + block.Height;
 
-                        int v000 = AddObjVertex(w, vertexIndices, x, 0, y);
-                        int v100 = AddObjVertex(w, vertexIndices, x + 1, 0, y);
-                        int v110 = AddObjVertex(w, vertexIndices, x + 1, 0, y + 1);
-                        int v010 = AddObjVertex(w, vertexIndices, x, 0, y + 1);
-                        int v001 = AddObjVertex(w, vertexIndices, x, WallHeight, y);
-                        int v101 = AddObjVertex(w, vertexIndices, x + 1, WallHeight, y);
-                        int v111 = AddObjVertex(w, vertexIndices, x + 1, WallHeight, y + 1);
-                        int v011 = AddObjVertex(w, vertexIndices, x, WallHeight, y + 1);
+                    int v000 = AddObjVertex(w, vertexIndices, x0, 0, y0);
+                    int v100 = AddObjVertex(w, vertexIndices, x1, 0, y0);
+                    int v110 = AddObjVertex(w, vertexIndices, x1, 0, y1);
+                    int v010 = AddObjVertex(w, vertexIndices, x0, 0, y1);
+                    int v001 = AddObjVertex(w, vertexIndices, x0, WallHeight, y0);
+                    int v101 = AddObjVertex(w, vertexIndices, x1, WallHeight, y0);
+                    int v111 = AddObjVertex(w, vertexIndices, x1, WallHeight, y1);
+                    int v011 = AddObjVertex(w, vertexIndices, x0, WallHeight, y1);
 
-                        // Top and bottom caps.
-                        faces.Add((v001, v101, v111, v011));
-                        faces.Add((v010, v110, v100, v000));
+                    // Bottom and top caps.
+                    faces.Add((v010, v110, v100, v000));
+                    faces.Add((v001, v101, v111, v011));
 
-                        // Emit side faces only when there is no adjacent wall.
-                        if (x == 0 || map[x - 1, y] == 0)
-                        {
-                            faces.Add((v000, v001, v011, v010));
-                        }
-
-                        if (x == width - 1 || map[x + 1, y] == 0)
-                        {
-                            faces.Add((v100, v110, v111, v101));
-                        }
-
-                        if (y == 0 || map[x, y - 1] == 0)
-                        {
-                            faces.Add((v000, v100, v101, v001));
-                        }
-
-                        if (y == height - 1 || map[x, y + 1] == 0)
-                        {
-                            faces.Add((v010, v011, v111, v110));
-                        }
-                    }
+                    // Four outer side faces of the merged block.
+                    faces.Add((v000, v001, v011, v010));
+                    faces.Add((v100, v110, v111, v101));
+                    faces.Add((v000, v100, v101, v001));
+                    faces.Add((v010, v011, v111, v110));
                 }
 
                 foreach (var face in faces)

@@ -3,7 +3,6 @@
 /home/user/Документы/GitHub/simple-room-map-generator/obj/Debug/net10.0/RoomsMapGenerator.AssemblyInfo.cs
 /home/user/Документы/GitHub/simple-room-map-generator/obj/Debug/net10.0/RoomsMapGenerator.csproj.CoreCompileInputs.cache
 /home/user/Документы/GitHub/simple-room-map-generator/obj/Debug/net10.0/RoomsMapGenerator.sourcelink.json
-/home/user/Документы/GitHub/simple-room-map-generator/bin/Debug/net10.0/RoomsMapGenerator
 /home/user/Документы/GitHub/simple-room-map-generator/bin/Debug/net10.0/RoomsMapGenerator.deps.json
 /home/user/Документы/GitHub/simple-room-map-generator/bin/Debug/net10.0/RoomsMapGenerator.runtimeconfig.json
 /home/user/Документы/GitHub/simple-room-map-generator/bin/Debug/net10.0/RoomsMapGenerator.dll

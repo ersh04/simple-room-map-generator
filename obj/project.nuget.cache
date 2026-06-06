@@ -1,8 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "MOcJV7Z9g3U=",
+  "dgSpecHash": "fcNIgaQW6s4=",
   "success": true,
   "projectFilePath": "/home/user/Документы/GitHub/simple-room-map-generator/RoomsMapGenerator.csproj",
-  "expectedPackageFiles": [],
+  "expectedPackageFiles": [
+    "/home/user/.nuget/packages/microsoft.aspnetcore.app.ref/10.0.8/microsoft.aspnetcore.app.ref.10.0.8.nupkg.sha512"
+  ],
   "logs": []
 }

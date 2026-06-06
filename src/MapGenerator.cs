@@ -5,7 +5,12 @@
     private const int MapWidth = 128;
     private const int MapHeight = 128;
     private const int SlicesCount = 35;
-    private const int MinDistanceBetweenSlices = 5;
+    private const int MinRoomSize = 5;
+    private const int MaxRoomSize = 10;
+    // The maximum allowed aspect ratio (width/height or height/width) for a room.
+    private const float MaxRoomAspectRatio = 2f;
+    private const double ContinueLatestBranchChance = 0.65;
+    // Room merging chance. Applying after room creation.
     private const float MergeChance = 0.10f;
 
     #endregion
@@ -27,21 +32,19 @@
     private static int[,] GenerateMap(Random rng)
     {
         int[,] gameMap = new int[MapWidth, MapHeight];
-        GenerateBorders(gameMap);
 
         int didSlices = 0;
         int attempts = 0;
         int maxAttempts = SlicesCount * 2000;
 
-        // Ceneters of the rooms (slices) that were successfully created.
+        // Centers of generated rooms.
         List<MapSlice> roomCenters = new List<MapSlice>();
-
         while (didSlices < SlicesCount && attempts < maxAttempts)
         {
-            var newRoomCenter = RandomSlice(gameMap, rng, MinDistanceBetweenSlices);
-            if (newRoomCenter.XCenter != -1 && newRoomCenter.YCenter != -1)
+            var newRoom = RandomSlice(gameMap, rng, roomCenters);
+            if (newRoom.XCenter != -1 && newRoom.YCenter != -1)
             {
-                roomCenters.Add(newRoomCenter);
+                roomCenters.Add(newRoom);
                 didSlices++;
             }
 
@@ -58,128 +61,6 @@
         return gameMap;
     }
 
-    private static void GenerateBorders(int[,] gameMap)
-    {
-        for (int i = 0; i < MapWidth; i++)
-        {
-            gameMap[i, 0] = 1;
-            gameMap[i, MapHeight - 1] = 1;
-        }
-
-        for (int i = 0; i < MapHeight; i++)
-        {
-            gameMap[0, i] = 1;
-            gameMap[MapWidth - 1, i] = 1;
-        }
-    }
-
-    /// <summary>
-    /// Attempts to create a random slice (wall) in the map.
-    /// The slice is either vertical or horizontal, and it starts from a random coordinate on the chosen axis.
-    /// The method checks if the slice can be placed without violating the minimum distance requirement from existing slices.
-    /// If it can be placed, it extends the slice until it hits another wall or the edge of the map.
-    /// Returns true if a slice was successfully created, false otherwise.
-    /// </summary>
-    /// <param name="gameMap">The map in which to create the slice.</param>
-    /// <param name="rng">The random number generator to use for slice placement.</param>
-    /// <param name="minDistance">The minimum distance required between slices.</param>
-    /// <returns>A MapSlice object representing the created slice, or a MapSlice with coordinates
-    /// (-1, -1) if no slice was created.</returns>
-    private static MapSlice RandomSlice(int[,] gameMap, Random rng, int minDistance)
-    {
-        bool vertical = rng.Next(0, 2) == 0;
-        int axisSize = vertical ? MapHeight : MapWidth;
-        int walkSize = vertical ? MapWidth : MapHeight;
-        int coord = rng.Next(minDistance, axisSize - minDistance);
-        
-        for (int d = -minDistance; d <= minDistance; d++)
-        {
-            int check = coord + d;
-            if (check >= 1 && check < axisSize - 1 && check != coord)
-            {
-                for (int i = 1; i < walkSize - 1; i++)
-                {
-                    int x = vertical ? i : check;
-                    int y = vertical ? check : i;
-
-                    if (gameMap[x, y] == 1)
-                    {
-                        if (vertical &&
-                            (gameMap[x, y - 1] == 0 || y == 0 || gameMap[x, y + 1] == 0 || y == MapHeight - 1))
-                        {
-                            return new MapSlice((-1, -1), Array.Empty<(int, int)>());
-                        }
-
-                        if (!vertical &&
-                            (gameMap[x - 1, y] == 0 || x == 0 || gameMap[x + 1, y] == 0 || x == MapWidth - 1))
-                        {
-                            return new MapSlice((-1, -1), Array.Empty<(int, int)>());
-                        }
-                    }
-                }
-            }
-        }
-
-        var possible = new List<int>();
-
-        for (int i = 0; i < walkSize - 1; i++)
-        {
-            int x1 = vertical ? i : coord;
-            int y1 = vertical ? coord : i;
-            int x2 = vertical ? i + 1 : coord;
-            int y2 = vertical ? coord : i + 1;
-
-            if (gameMap[x1, y1] == 1 && gameMap[x2, y2] == 0)
-            {
-                possible.Add(i);
-            }
-        }
-
-        if (possible.Count == 0)
-        {
-            return new MapSlice((-1, -1), Array.Empty<(int, int)>());
-        }
-
-        int cursor = possible[rng.Next(possible.Count)];
-        List<(int, int)> walls = new List<(int, int)>();
-        int firstCarved = -1;
-        int lastCarved = -1;
-        while (true)
-        {
-            cursor++;
-            if (cursor >= walkSize)
-            {
-                return new MapSlice((-1, -1), Array.Empty<(int, int)>());
-            }
-
-            int x = vertical ? cursor : coord;
-            int y = vertical ? coord : cursor;
-
-            if (gameMap[x, y] == 1)
-            {
-                break;
-            }
-
-            gameMap[x, y] = 1;
-            walls.Add((x, y));
-
-            if (firstCarved == -1)
-            {
-                firstCarved = cursor;
-            }
-
-            lastCarved = cursor;
-        }
-
-        if (firstCarved == -1)
-        {
-            return new MapSlice((-1, -1), Array.Empty<(int, int)>());
-        }
-
-        int center = (firstCarved + lastCarved) / 2;
-        return new MapSlice(vertical ? (center, coord) : (coord, center), walls.ToArray());
-    }
-
     private static bool IsWall(int[,] gameMap, int x, int y)
     {
         if (x <= 0 || x >= MapWidth - 1 || y <= 0 || y >= MapHeight - 1)
@@ -191,7 +72,171 @@
     }
 
     #endregion
-    
+
+    #region Slice Creation
+
+    private static MapSlice RandomSlice(
+        int[,] gameMap,
+        Random rng,
+        List<MapSlice> existingRooms)
+    {
+        int minRoomSize = MinRoomSize;
+        int maxRoomSize = Math.Max(minRoomSize, MaxRoomSize);
+        int placementAttempts = 48;
+
+        for (int attempt = 0; attempt < placementAttempts; attempt++)
+        {
+            int width = rng.Next(minRoomSize, maxRoomSize + 1);
+            int height = rng.Next(minRoomSize, maxRoomSize + 1);
+
+            float aspectRatio = (float)Math.Max(width, height) / Math.Min(width, height);
+            if (aspectRatio > MaxRoomAspectRatio)
+            {
+                continue;
+            }
+
+            int left;
+            int top;
+            int directionUsed = -1;
+            MapSlice? anchorRoom = null;
+
+            if (existingRooms.Count == 0)
+            {
+                left = rng.Next(1, MapWidth - width);
+                top = rng.Next(1, MapHeight - height);
+            }
+            else
+            {
+                anchorRoom = ChooseAnchorRoom(existingRooms, rng);
+                directionUsed = ChooseDirectionByLongSide(width, height, rng);
+                switch (directionUsed)
+                {
+                    case 0:
+                        // Right of anchor room.
+                        left = anchorRoom.Right + 1;
+                        top = rng.Next(anchorRoom.Top - height + 2, anchorRoom.Bottom);
+                        break;
+                    case 1:
+                        // Left of anchor room.
+                        left = anchorRoom.Left - width;
+                        top = rng.Next(anchorRoom.Top - height + 2, anchorRoom.Bottom);
+                        break;
+                    case 2:
+                        // Down from anchor room.
+                        left = rng.Next(anchorRoom.Left - width + 2, anchorRoom.Right);
+                        top = anchorRoom.Bottom + 1;
+                        break;
+                    default:
+                        // Up from anchor room.
+                        left = rng.Next(anchorRoom.Left - width + 2, anchorRoom.Right);
+                        top = anchorRoom.Top - height;
+                        break;
+                }
+            }
+
+            int right = left + width - 1;
+            int bottom = top + height - 1;
+
+            int distance = existingRooms.Count == 0 ? MinRoomSize : 0;
+            if (!CanPlaceRectangularRoom(existingRooms, left, top, right, bottom, distance))
+            {
+                continue;
+            }
+
+            var walls = new List<(int, int)>(width * 2 + height * 2);
+
+            for (int x = left; x <= right; x++)
+            {
+                gameMap[x, top] = 1;
+                gameMap[x, bottom] = 1;
+                walls.Add((x, top));
+                if (top != bottom)
+                {
+                    walls.Add((x, bottom));
+                }
+            }
+
+            for (int y = top + 1; y < bottom; y++)
+            {
+                gameMap[left, y] = 1;
+                gameMap[right, y] = 1;
+                walls.Add((left, y));
+                if (left != right)
+                {
+                    walls.Add((right, y));
+                }
+            }
+
+            var center = ((left + right) / 2, (top + bottom) / 2);
+
+            return new MapSlice(center, walls.ToArray(), left, top, right, bottom);
+        }
+
+        return new MapSlice(-1, -1, Array.Empty<(int, int)>());
+    }
+
+    private static MapSlice ChooseAnchorRoom(List<MapSlice> existingRooms, Random rng)
+    {
+        if (existingRooms.Count == 1 || rng.NextDouble() < ContinueLatestBranchChance)
+        {
+            return existingRooms[^1];
+        }
+
+        return existingRooms[rng.Next(existingRooms.Count - 1)];
+    }
+
+    private static int ChooseDirectionByLongSide(int width, int height, Random rng)
+    {
+        // 0/1 -> right/left placement, contact side length is room height.
+        // 2/3 -> down/up placement, contact side length is room width.
+        bool preferHorizontalContact = width >= height;
+
+        // 75% of the time choose directions that use the long side for contact.
+        if (preferHorizontalContact)
+        {
+            return rng.NextDouble() < 0.75 ? (rng.Next(0, 2) == 0 ? 2 : 3) : (rng.Next(0, 2) == 0 ? 0 : 1);
+        }
+
+        return rng.NextDouble() < 0.75 ? (rng.Next(0, 2) == 0 ? 0 : 1) : (rng.Next(0, 2) == 0 ? 2 : 3);
+    }
+
+    private static bool CanPlaceRectangularRoom(
+        List<MapSlice> existingRooms,
+        int left,
+        int top,
+        int right,
+        int bottom,
+        int minDistance)
+    {
+        if (left <= 0 || top <= 0 || right >= MapWidth - 1 || bottom >= MapHeight - 1)
+        {
+            return false;
+        }
+
+        foreach (var room in existingRooms)
+        {
+            if (room.Left < 0)
+            {
+                continue;
+            }
+
+            bool intersectsWithMargin =
+                left <= room.Right + minDistance &&
+                right >= room.Left - minDistance &&
+                top <= room.Bottom + minDistance &&
+                bottom >= room.Top - minDistance;
+
+            if (intersectsWithMargin)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    #endregion
+
     #region Slices Connect
 
     private static void EnsureAllSlicesConnected(int[,] gameMap, List<MapSlice> slices, Random rng)
@@ -221,7 +266,7 @@
                 }
             }
 
-            if (!openedDoorway && !TryOpenAnyBridgeWall(gameMap, regionMap))
+            if (!openedDoorway)
             {
                 return;
             }
@@ -295,17 +340,10 @@
                     continue;
                 }
 
-                var (isBridge, isVertical) = IsBridgeBetweenDifferentRegions(regionMap, x, y);
+                var (isBridge, _) = IsBridgeBetweenDifferentRegions(regionMap, x, y);
                 if (isBridge)
                 {
-                    if (isVertical)
-                    {
-                        gameMap[x, y - 1] = 0;
-                    }
-                    else
-                    {
-                        gameMap[x - 1, y] = 0;
-                    }
+                    gameMap[x, y] = 0;
                     return true;
                 }
             }
@@ -320,7 +358,6 @@
     /// </summary>
     private static (bool, bool) IsBridgeBetweenDifferentRegions(int[,] regionMap, int x, int y)
     {
-        // Check left and right neighbors
         int left = regionMap[x - 1, y];
         int right = regionMap[x + 1, y];
         if (left != 0 && right != 0 && left != right)
@@ -328,7 +365,6 @@
             return (true, true);
         }
 
-        // Check up and down neighbors
         int up = regionMap[x, y - 1];
         int down = regionMap[x, y + 1];
         if (up != 0 && down != 0 && up != down)
@@ -339,29 +375,124 @@
         return (false, false);
     }
 
+    private static bool TryOpenJointDoorway(int[,] gameMap, int[,] regionMap, int x, int y, int left, int top, int right, int bottom)
+    {
+        if (TryOpenJointDoorwayPair(gameMap, regionMap, x, y, x - 1, y, left, top, right, bottom))
+        {
+            return true;
+        }
+
+        if (TryOpenJointDoorwayPair(gameMap, regionMap, x, y, x + 1, y, left, top, right, bottom))
+        {
+            return true;
+        }
+
+        if (TryOpenJointDoorwayPair(gameMap, regionMap, x, y, x, y - 1, left, top, right, bottom))
+        {
+            return true;
+        }
+
+        return TryOpenJointDoorwayPair(gameMap, regionMap, x, y, x, y + 1, left, top, right, bottom);
+    }
+
+    private static bool TryOpenJointDoorwayPair(
+        int[,] gameMap,
+        int[,] regionMap,
+        int x,
+        int y,
+        int otherX,
+        int otherY,
+        int left,
+        int top,
+        int right,
+        int bottom)
+    {
+        if (!IsExternalWall(gameMap, otherX, otherY, left, top, right, bottom))
+        {
+            return false;
+        }
+
+        int deltaX = otherX - x;
+        int deltaY = otherY - y;
+
+        int firstRegionX = x - deltaX;
+        int firstRegionY = y - deltaY;
+        int secondRegionX = otherX + deltaX;
+        int secondRegionY = otherY + deltaY;
+
+        if (firstRegionX <= 0 || firstRegionX >= MapWidth - 1 || firstRegionY <= 0 || firstRegionY >= MapHeight - 1)
+        {
+            return false;
+        }
+
+        if (secondRegionX <= 0 || secondRegionX >= MapWidth - 1 || secondRegionY <= 0 || secondRegionY >= MapHeight - 1)
+        {
+            return false;
+        }
+
+        int firstRegion = regionMap[firstRegionX, firstRegionY];
+        int secondRegion = regionMap[secondRegionX, secondRegionY];
+        if (firstRegion == 0 || secondRegion == 0 || firstRegion == secondRegion)
+        {
+            return false;
+        }
+
+        gameMap[x, y] = 0;
+        gameMap[otherX, otherY] = 0;
+        return true;
+    }
+
+    private static bool IsExternalWall(int[,] gameMap, int x, int y, int left, int top, int right, int bottom)
+    {
+        if (x <= 0 || x >= MapWidth - 1 || y <= 0 || y >= MapHeight - 1)
+        {
+            return false;
+        }
+
+        if (x >= left && x <= right && y >= top && y <= bottom)
+        {
+            return false;
+        }
+
+        return gameMap[x, y] == 1;
+    }
+
     #endregion
 
     #region MapSlice class
 
     private class MapSlice
     {
-        public int XCenter { private set; get; }
-        public int YCenter { private set; get; }
+        public int XCenter { get; }
+        public int YCenter { get; }
 
-        public (int, int)[] Walls { get; private set; }
-        
+        public int Left { get; }
+        public int Top { get; }
+        public int Right { get; }
+        public int Bottom { get; }
+
+        public (int, int)[] Walls { get; }
+
         public MapSlice(int xCenter, int yCenter, (int, int)[] walls)
         {
             XCenter = xCenter;
             YCenter = yCenter;
             Walls = walls;
+            Left = -1;
+            Top = -1;
+            Right = -1;
+            Bottom = -1;
         }
 
-        public MapSlice((int, int) center, (int, int)[] walls)
+        public MapSlice((int, int) center, (int, int)[] walls, int left, int top, int right, int bottom)
         {
             XCenter = center.Item1;
             YCenter = center.Item2;
             Walls = walls;
+            Left = left;
+            Top = top;
+            Right = right;
+            Bottom = bottom;
         }
 
         public bool TryCreateDoorway(int[,] gameMap, int[,] regionMap)
@@ -375,17 +506,8 @@
                     continue;
                 }
 
-                var (isBridge, isVertical) = IsBridgeBetweenDifferentRegions(regionMap, x, y);
-                if (isBridge)
+                if (TryOpenJointDoorway(gameMap, regionMap, x, y, Left, Top, Right, Bottom))
                 {
-                    if (isVertical)
-                    {
-                        gameMap[x, YCenter] = 0;
-                    }
-                    else
-                    {
-                        gameMap[XCenter, y] = 0;
-                    }
                     return true;
                 }
             }
@@ -414,6 +536,6 @@
             return false;
         }
     }
-    
+
     #endregion
 }

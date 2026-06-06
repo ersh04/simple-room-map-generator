@@ -5,8 +5,7 @@ public static class Visualisation
 
     public static void Main()
     {
-        int worldSeed = 0;
-        var gameMap = MapGenerator.GetMap(out worldSeed);
+        var gameMap = MapGenerator.GetMap(out int worldSeed);
         Visualise(gameMap, worldSeed);
         Converter3D.ConvertToObj(gameMap, "output.obj");
 

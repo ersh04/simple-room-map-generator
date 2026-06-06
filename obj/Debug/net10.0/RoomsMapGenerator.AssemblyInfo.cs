@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RoomsMapGenerator")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+56032a74cfe9fdbef1d1013cb823911b3e0fb4f3")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ca6a01b5281f3d6c34fe0899b90943f5d85a4950")]
 [assembly: System.Reflection.AssemblyProductAttribute("RoomsMapGenerator")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RoomsMapGenerator")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
