@@ -1,5 +1,7 @@
 public class Converter3D
 {
+    private const float WallHeight = 3f;
+    
     #region STL
     public static bool ConvertToStl(int[,] map, string outputPath)
     {
@@ -11,7 +13,6 @@ public class Converter3D
 
                 int width = map.GetLength(0);
                 int height = map.GetLength(1);
-                float wallHeight = 1.0f;
 
                 for (int x = 0; x < width; x++)
                 {
@@ -24,16 +25,16 @@ public class Converter3D
                             WriteTriangle(w, 0, 0, -1, x, y, 0, x + 1, y + 1, 0, x, y + 1, 0);
 
                             // Back face
-                            WriteTriangle(w, 0, 0, 1, x + 1, y + 1, wallHeight, x + 1, y, wallHeight, x, y, wallHeight);
-                            WriteTriangle(w, 0, 0, 1, x + 1, y + 1, wallHeight, x, y, wallHeight, x, y + 1, wallHeight);
+                            WriteTriangle(w, 0, 0, 1, x + 1, y + 1, WallHeight, x + 1, y, WallHeight, x, y, WallHeight);
+                            WriteTriangle(w, 0, 0, 1, x + 1, y + 1, WallHeight, x, y, WallHeight, x, y + 1, WallHeight);
 
                             // Left face
-                            WriteTriangle(w, -1, 0, 0, x, y + 1, wallHeight, x, y + 1, 0, x, y, 0);
-                            WriteTriangle(w, -1, 0, 0, x, y + 1, wallHeight, x, y, 0, x, y, wallHeight);
+                            WriteTriangle(w, -1, 0, 0, x, y + 1, WallHeight, x, y + 1, 0, x, y, 0);
+                            WriteTriangle(w, -1, 0, 0, x, y + 1, WallHeight, x, y, 0, x, y, WallHeight);
 
                             // Right face
-                            WriteTriangle(w, 1, 0, 0, x + 1, y, 0, x + 1, y + 1, 0, x + 1, y + 1, wallHeight);
-                            WriteTriangle(w, 1, 0, 0, x + 1, y, 0, x + 1, y + 1, wallHeight, x + 1, y, wallHeight);
+                            WriteTriangle(w, 1, 0, 0, x + 1, y, 0, x + 1, y + 1, 0, x + 1, y + 1, WallHeight);
+                            WriteTriangle(w, 1, 0, 0, x + 1, y, 0, x + 1, y + 1, WallHeight, x + 1, y, WallHeight);
                         }
                     }
                 }
@@ -89,7 +90,6 @@ public class Converter3D
             {
                 int width = map.GetLength(0);
                 int height = map.GetLength(1);
-                float wallHeight = 1.0f;
                 var vertexIndices = new Dictionary<(float x, float y, float z), int>();
                 var faces = new List<(int a, int b, int c, int d)>();
 
@@ -105,14 +105,14 @@ public class Converter3D
                             continue;
                         }
 
-                        int v000 = AddObjVertex(w, vertexIndices, x, y, 0);
-                        int v100 = AddObjVertex(w, vertexIndices, x + 1, y, 0);
-                        int v110 = AddObjVertex(w, vertexIndices, x + 1, y + 1, 0);
-                        int v010 = AddObjVertex(w, vertexIndices, x, y + 1, 0);
-                        int v001 = AddObjVertex(w, vertexIndices, x, y, wallHeight);
-                        int v101 = AddObjVertex(w, vertexIndices, x + 1, y, wallHeight);
-                        int v111 = AddObjVertex(w, vertexIndices, x + 1, y + 1, wallHeight);
-                        int v011 = AddObjVertex(w, vertexIndices, x, y + 1, wallHeight);
+                        int v000 = AddObjVertex(w, vertexIndices, x, 0, y);
+                        int v100 = AddObjVertex(w, vertexIndices, x + 1, 0, y);
+                        int v110 = AddObjVertex(w, vertexIndices, x + 1, 0, y + 1);
+                        int v010 = AddObjVertex(w, vertexIndices, x, 0, y + 1);
+                        int v001 = AddObjVertex(w, vertexIndices, x, WallHeight, y);
+                        int v101 = AddObjVertex(w, vertexIndices, x + 1, WallHeight, y);
+                        int v111 = AddObjVertex(w, vertexIndices, x + 1, WallHeight, y + 1);
+                        int v011 = AddObjVertex(w, vertexIndices, x, WallHeight, y + 1);
 
                         // Top and bottom caps.
                         faces.Add((v001, v101, v111, v011));
