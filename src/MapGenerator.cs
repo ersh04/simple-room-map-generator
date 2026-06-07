@@ -2,16 +2,23 @@
 {
     #region Constants
 
+    // Map dimensions.
     private const int MapWidth = 128;
     private const int MapHeight = 128;
-    private const int SlicesCount = 35;
+    // Number of rooms (slices) to generate.
+    private const int RoomCount = 16;
+    // The minimum required length of the shared wall between the new room and the anchor room.
     private const int MinRoomSize = 5;
-    private const int MaxRoomSize = 10;
+    private const int MaxRoomSize = 8;
+    private const int MinSharedWallLength = 3;
     // The maximum allowed aspect ratio (width/height or height/width) for a room.
-    private const float MaxRoomAspectRatio = 2f;
-    private const double ContinueLatestBranchChance = 0.65;
-    // Room merging chance. Applying after room creation.
-    private const float MergeChance = 0.10f;
+    private const float MaxRoomAspectRatio = 4f;
+    // Keep outer silhouettes clean; doorways are created only at room joints.
+    private const float MergeChance = 0f;
+    // The chance to continue the latest branch when generating rooms.
+    private const float ContinueLatestBranchChance = 0.70f;
+    // The chance to follow the main path direction when generating rooms.
+    private const float MainPathDirectionChance = 0.75f;
 
     #endregion
 
@@ -35,11 +42,11 @@
 
         int didSlices = 0;
         int attempts = 0;
-        int maxAttempts = SlicesCount * 2000;
+        int maxAttempts = RoomCount * 2000;
 
         // Centers of generated rooms.
         List<MapSlice> roomCenters = new List<MapSlice>();
-        while (didSlices < SlicesCount && attempts < maxAttempts)
+        while (didSlices < RoomCount && attempts < maxAttempts)
         {
             var newRoom = RandomSlice(gameMap, rng, roomCenters);
             if (newRoom.XCenter != -1 && newRoom.YCenter != -1)
@@ -80,56 +87,55 @@
         Random rng,
         List<MapSlice> existingRooms)
     {
-        int minRoomSize = MinRoomSize;
-        int maxRoomSize = Math.Max(minRoomSize, MaxRoomSize);
-        int placementAttempts = 48;
+        int placementAttempts = 160;
 
         for (int attempt = 0; attempt < placementAttempts; attempt++)
         {
-            int width = rng.Next(minRoomSize, maxRoomSize + 1);
-            int height = rng.Next(minRoomSize, maxRoomSize + 1);
-
-            float aspectRatio = (float)Math.Max(width, height) / Math.Min(width, height);
-            if (aspectRatio > MaxRoomAspectRatio)
-            {
-                continue;
-            }
-
             int left;
             int top;
+            int width;
+            int height;
             int directionUsed = -1;
             MapSlice? anchorRoom = null;
 
+            width = rng.Next(MinRoomSize, MaxRoomSize + 1);
+            height = rng.Next(MinRoomSize, MaxRoomSize + 1);
+
             if (existingRooms.Count == 0)
             {
-                left = rng.Next(1, MapWidth - width);
-                top = rng.Next(1, MapHeight - height);
+                left = MapWidth / 2;
+                top = MapHeight / 2;
             }
             else
             {
                 anchorRoom = ChooseAnchorRoom(existingRooms, rng);
-                directionUsed = ChooseDirectionByLongSide(width, height, rng);
+                directionUsed = ChooseDirectionForLayout(existingRooms, anchorRoom, rng);
+
                 switch (directionUsed)
                 {
                     case 0:
-                        // Right of anchor room.
-                        left = anchorRoom.Right + 1;
-                        top = rng.Next(anchorRoom.Top - height + 2, anchorRoom.Bottom);
+                        // place so rooms share the same wall column
+                        left = anchorRoom.Right;
+                        top = RandomInInclusiveRange(rng, anchorRoom.Top - height + MinSharedWallLength,
+                            anchorRoom.Bottom - MinSharedWallLength + 1);
                         break;
                     case 1:
-                        // Left of anchor room.
-                        left = anchorRoom.Left - width;
-                        top = rng.Next(anchorRoom.Top - height + 2, anchorRoom.Bottom);
+                        // place so rooms share the same wall column on the left
+                        left = anchorRoom.Left - width + 1;
+                        top = RandomInInclusiveRange(rng, anchorRoom.Top - height + MinSharedWallLength,
+                            anchorRoom.Bottom - MinSharedWallLength + 1);
                         break;
                     case 2:
-                        // Down from anchor room.
-                        left = rng.Next(anchorRoom.Left - width + 2, anchorRoom.Right);
-                        top = anchorRoom.Bottom + 1;
+                        left = RandomInInclusiveRange(rng, anchorRoom.Left - width + MinSharedWallLength,
+                            anchorRoom.Right - MinSharedWallLength + 1);
+                        // place so rooms share the same wall row
+                        top = anchorRoom.Bottom;
                         break;
                     default:
-                        // Up from anchor room.
-                        left = rng.Next(anchorRoom.Left - width + 2, anchorRoom.Right);
-                        top = anchorRoom.Top - height;
+                        left = RandomInInclusiveRange(rng, anchorRoom.Left - width + MinSharedWallLength,
+                            anchorRoom.Right - MinSharedWallLength + 1);
+                        // place so rooms share the same wall row on top
+                        top = anchorRoom.Top - height + 1;
                         break;
                 }
             }
@@ -137,8 +143,20 @@
             int right = left + width - 1;
             int bottom = top + height - 1;
 
-            int distance = existingRooms.Count == 0 ? MinRoomSize : 0;
-            if (!CanPlaceRectangularRoom(existingRooms, left, top, right, bottom, distance))
+            float aspectRatio = (float)Math.Max(width, height) / Math.Min(width, height);
+            if (aspectRatio > MaxRoomAspectRatio)
+            {
+                continue;
+            }
+
+            if (anchorRoom is not null && !HasMinimumSharedWall(anchorRoom, left, top, right, bottom, directionUsed,
+                MinSharedWallLength))
+            {
+                continue;
+            }
+
+            int distance = existingRooms.Count == 0 ? 3 : 0;
+            if (!CanPlaceRectangularRoom(existingRooms, left, top, right, bottom, distance, anchorRoom))
             {
                 continue;
             }
@@ -168,7 +186,6 @@
             }
 
             var center = ((left + right) / 2, (top + bottom) / 2);
-
             return new MapSlice(center, walls.ToArray(), left, top, right, bottom);
         }
 
@@ -185,19 +202,60 @@
         return existingRooms[rng.Next(existingRooms.Count - 1)];
     }
 
-    private static int ChooseDirectionByLongSide(int width, int height, Random rng)
+    private static int ChooseDirectionForLayout(List<MapSlice> existingRooms, MapSlice anchorRoom, Random rng)
     {
-        // 0/1 -> right/left placement, contact side length is room height.
-        // 2/3 -> down/up placement, contact side length is room width.
-        bool preferHorizontalContact = width >= height;
+        bool isLatestAnchor = existingRooms.Count > 0 && ReferenceEquals(anchorRoom, existingRooms[^1]);
+        double roll = rng.NextDouble();
 
-        // 75% of the time choose directions that use the long side for contact.
-        if (preferHorizontalContact)
+        if (isLatestAnchor)
         {
-            return rng.NextDouble() < 0.75 ? (rng.Next(0, 2) == 0 ? 2 : 3) : (rng.Next(0, 2) == 0 ? 0 : 1);
+            if (roll < MainPathDirectionChance)
+            {
+                return 0;
+            }
+
+            return rng.Next(0, 2) == 0 ? 2 : 3;
         }
 
-        return rng.NextDouble() < 0.75 ? (rng.Next(0, 2) == 0 ? 0 : 1) : (rng.Next(0, 2) == 0 ? 2 : 3);
+        return rng.Next(0, 2) == 0 ? 2 : 3;
+    }
+
+    private static int RandomInInclusiveRange(Random rng, int minInclusive, int maxInclusive)
+    {
+        if (minInclusive > maxInclusive)
+        {
+            (minInclusive, maxInclusive) = (maxInclusive, minInclusive);
+        }
+
+        return rng.Next(minInclusive, maxInclusive + 1);
+    }
+
+    private static bool HasMinimumSharedWall(
+        MapSlice anchorRoom,
+        int left,
+        int top,
+        int right,
+        int bottom,
+        int directionUsed,
+        int minSharedLength)
+    {
+        if (directionUsed == 0 || directionUsed == 1)
+        {
+            int overlapStart = Math.Max(top, anchorRoom.Top);
+            int overlapEnd = Math.Min(bottom, anchorRoom.Bottom);
+            int overlapLength = overlapEnd - overlapStart + 1;
+            return overlapLength >= minSharedLength;
+        }
+
+        if (directionUsed == 2 || directionUsed == 3)
+        {
+            int overlapStart = Math.Max(left, anchorRoom.Left);
+            int overlapEnd = Math.Min(right, anchorRoom.Right);
+            int overlapLength = overlapEnd - overlapStart + 1;
+            return overlapLength >= minSharedLength;
+        }
+
+        return false;
     }
 
     private static bool CanPlaceRectangularRoom(
@@ -206,7 +264,8 @@
         int top,
         int right,
         int bottom,
-        int minDistance)
+        int minDistance,
+        MapSlice? anchorRoom)
     {
         if (left <= 0 || top <= 0 || right >= MapWidth - 1 || bottom >= MapHeight - 1)
         {
@@ -220,6 +279,34 @@
                 continue;
             }
 
+            if (room == anchorRoom)
+            {
+                // Allow rooms to touch the anchor by a shared wall, but ensure interiors do not overlap.
+                int innerLeft = left + 1;
+                int innerRight = right - 1;
+                int innerTop = top + 1;
+                int innerBottom = bottom - 1;
+
+                int rInnerLeft = room.Left + 1;
+                int rInnerRight = room.Right - 1;
+                int rInnerTop = room.Top + 1;
+                int rInnerBottom = room.Bottom - 1;
+
+                bool innerValid = innerLeft <= innerRight && innerTop <= innerBottom && rInnerLeft <= rInnerRight && rInnerTop <= rInnerBottom;
+                if (innerValid)
+                {
+                    bool innerOverlap = innerLeft <= rInnerRight && innerRight >= rInnerLeft && innerTop <= rInnerBottom && innerBottom >= rInnerTop;
+                    if (innerOverlap)
+                    {
+                        return false;
+                    }
+                }
+
+                // touching anchor by wall is allowed
+                continue;
+            }
+
+            // For non-anchor rooms respect the minimum distance (margin).
             bool intersectsWithMargin =
                 left <= room.Right + minDistance &&
                 right >= room.Left - minDistance &&
@@ -254,10 +341,9 @@
             bool openedDoorway = false;
             if (slices.Count > 0)
             {
-                int startIndex = rng.Next(0, slices.Count);
                 for (int i = 0; i < slices.Count; i++)
                 {
-                    var slice = slices[(startIndex + i) % slices.Count];
+                    var slice = slices[i];
                     if (slice.TryCreateDoorway(gameMap, regionMap))
                     {
                         openedDoorway = true;
@@ -321,58 +407,6 @@
 
         regionMap[x, y] = regionId;
         queue.Enqueue((x, y));
-    }
-
-    /// <summary>
-    /// Tries to open any wall that serves as a bridge between two different regions
-    /// (slices) in the map. This is a fallback method that is used when all attempts to create
-    /// doorways through slices have failed. It iterates through all walls in the map and checks
-    /// if any of them is a bridge between different regions.
-    /// </summary>
-    private static bool TryOpenAnyBridgeWall(int[,] gameMap, int[,] regionMap)
-    {
-        for (int y = 1; y < MapHeight - 1; y++)
-        {
-            for (int x = 1; x < MapWidth - 1; x++)
-            {
-                if (!IsWall(gameMap, x, y))
-                {
-                    continue;
-                }
-
-                var (isBridge, _) = IsBridgeBetweenDifferentRegions(regionMap, x, y);
-                if (isBridge)
-                {
-                    gameMap[x, y] = 0;
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Checks if the wall at the given coordinates serves as a bridge between two different regions in the map.
-    /// A wall is considered a bridge if it has non-zero region IDs on both sides and the region IDs are different.
-    /// </summary>
-    private static (bool, bool) IsBridgeBetweenDifferentRegions(int[,] regionMap, int x, int y)
-    {
-        int left = regionMap[x - 1, y];
-        int right = regionMap[x + 1, y];
-        if (left != 0 && right != 0 && left != right)
-        {
-            return (true, true);
-        }
-
-        int up = regionMap[x, y - 1];
-        int down = regionMap[x, y + 1];
-        if (up != 0 && down != 0 && up != down)
-        {
-            return (true, false);
-        }
-
-        return (false, false);
     }
 
     private static bool TryOpenJointDoorway(int[,] gameMap, int[,] regionMap, int x, int y, int left, int top, int right, int bottom)
@@ -457,6 +491,58 @@
         return gameMap[x, y] == 1;
     }
 
+    /// <summary>
+    /// Tries to open any wall that serves as a bridge between two different regions
+    /// (slices) in the map. This is a fallback method that is used when all attempts to create
+    /// doorways through slices have failed. It iterates through all walls in the map and checks
+    /// if any of them is a bridge between different regions.
+    /// </summary>
+    private static bool TryOpenAnyBridgeWall(int[,] gameMap, int[,] regionMap)
+    {
+        for (int y = 1; y < MapHeight - 1; y++)
+        {
+            for (int x = 1; x < MapWidth - 1; x++)
+            {
+                if (!IsWall(gameMap, x, y))
+                {
+                    continue;
+                }
+
+                var (isBridge, _) = IsBridgeBetweenDifferentRegions(regionMap, x, y);
+                if (isBridge)
+                {
+                    gameMap[x, y] = 0;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if the wall at the given coordinates serves as a bridge between two different regions in the map.
+    /// A wall is considered a bridge if it has non-zero region IDs on both sides and the region IDs are different.
+    /// </summary>
+    private static (bool, bool) IsBridgeBetweenDifferentRegions(int[,] regionMap, int x, int y)
+    {
+        int left = regionMap[x - 1, y];
+        int right = regionMap[x + 1, y];
+        if (left != 0 && right != 0 && left != right)
+        {
+            return (true, true);
+        }
+
+        int up = regionMap[x, y - 1];
+        int down = regionMap[x, y + 1];
+        if (up != 0 && down != 0 && up != down)
+        {
+            return (true, false);
+        }
+
+        return (false, false);
+    }
+
     #endregion
 
     #region MapSlice class
@@ -508,6 +594,16 @@
 
                 if (TryOpenJointDoorway(gameMap, regionMap, x, y, Left, Top, Right, Bottom))
                 {
+                    return true;
+                }
+
+                // Fallback: if this single wall cell separates two different regions (shared wall),
+                // remove it to create a doorway. This handles the case where rooms share the same wall
+                // cell instead of having two adjacent wall columns.
+                var (isBridge, _) = IsBridgeBetweenDifferentRegions(regionMap, x, y);
+                if (isBridge)
+                {
+                    gameMap[x, y] = 0;
                     return true;
                 }
             }

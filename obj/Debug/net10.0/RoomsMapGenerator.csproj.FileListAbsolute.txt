@@ -12,3 +12,4 @@
 /home/user/Документы/GitHub/simple-room-map-generator/obj/Debug/net10.0/RoomsMapGenerator.pdb
 /home/user/Документы/GitHub/simple-room-map-generator/obj/Debug/net10.0/RoomsMapGenerator.genruntimeconfig.cache
 /home/user/Документы/GitHub/simple-room-map-generator/obj/Debug/net10.0/ref/RoomsMapGenerator.dll
+/home/user/Документы/GitHub/simple-room-map-generator/bin/Debug/net10.0/RoomsMapGenerator
